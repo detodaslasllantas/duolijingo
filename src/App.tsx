@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
 
+type Mode = "multiplication" | "division";
+
 type Question = {
-  a: number;
-  b: number;
+  promptA: number;
+  promptB: number;
   answer: number;
   key: string;
 };
@@ -10,72 +12,109 @@ type Question = {
 type Level = {
   id: number;
   name: string;
-  tables: number[];
+  values: number[];
   color: string;
 };
 
 const PASS_SCORE = 8;
 const QUESTIONS_PER_LEVEL = 10;
 const MAX_HEARTS = 3;
-const STORAGE_KEY = "duolijingo_progress_v41";
+const STORAGE_KEY = "duolijingo_progress_v5";
 
-const levels: Level[] = [
-  { id: 1, name: "Tabla del 1", tables: [1], color: "#22c55e" },
-  { id: 2, name: "Tabla del 2", tables: [2], color: "#06b6d4" },
-  { id: 3, name: "Mezcla 1 y 2", tables: [1, 2], color: "#3b82f6" },
-  { id: 4, name: "Tabla del 3", tables: [3], color: "#8b5cf6" },
-  { id: 5, name: "Mezcla 1, 2 y 3", tables: [1, 2, 3], color: "#d946ef" },
-  { id: 6, name: "Tabla del 4", tables: [4], color: "#f97316" },
-  { id: 7, name: "Mezcla 1 a 4", tables: [1, 2, 3, 4], color: "#ef4444" },
-  { id: 8, name: "Tabla del 5", tables: [5], color: "#eab308" },
-  { id: 9, name: "Mezcla 1 a 5", tables: [1, 2, 3, 4, 5], color: "#84cc16" },
-  { id: 10, name: "Tabla del 6", tables: [6], color: "#14b8a6" },
-  { id: 11, name: "Mezcla 1 a 6", tables: [1, 2, 3, 4, 5, 6], color: "#0ea5e9" },
-  { id: 12, name: "Tabla del 7", tables: [7], color: "#6366f1" },
-  { id: 13, name: "Mezcla 1 a 7", tables: [1, 2, 3, 4, 5, 6, 7], color: "#a855f7" },
-  { id: 14, name: "Tabla del 8", tables: [8], color: "#ec4899" },
-  { id: 15, name: "Mezcla 1 a 8", tables: [1, 2, 3, 4, 5, 6, 7, 8], color: "#f43f5e" },
-  { id: 16, name: "Tabla del 9", tables: [9], color: "#f59e0b" },
-  { id: 17, name: "Mezcla 1 a 9", tables: [1, 2, 3, 4, 5, 6, 7, 8, 9], color: "#10b981" },
-  { id: 18, name: "Tabla del 10", tables: [10], color: "#64748b" },
-  { id: 19, name: "Mezcla final", tables: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], color: "#0f766e" },
+const multiplicationLevels: Level[] = [
+  { id: 1, name: "Tabla del 1", values: [1], color: "#22c55e" },
+  { id: 2, name: "Tabla del 2", values: [2], color: "#06b6d4" },
+  { id: 3, name: "Mezcla 1 y 2", values: [1, 2], color: "#3b82f6" },
+  { id: 4, name: "Tabla del 3", values: [3], color: "#8b5cf6" },
+  { id: 5, name: "Mezcla 1, 2 y 3", values: [1, 2, 3], color: "#d946ef" },
+  { id: 6, name: "Tabla del 4", values: [4], color: "#f97316" },
+  { id: 7, name: "Mezcla 1 a 4", values: [1, 2, 3, 4], color: "#ef4444" },
+  { id: 8, name: "Tabla del 5", values: [5], color: "#eab308" },
+  { id: 9, name: "Mezcla 1 a 5", values: [1, 2, 3, 4, 5], color: "#84cc16" },
+  { id: 10, name: "Tabla del 6", values: [6], color: "#14b8a6" },
+  { id: 11, name: "Mezcla 1 a 6", values: [1, 2, 3, 4, 5, 6], color: "#0ea5e9" },
+  { id: 12, name: "Tabla del 7", values: [7], color: "#6366f1" },
+  { id: 13, name: "Mezcla 1 a 7", values: [1, 2, 3, 4, 5, 6, 7], color: "#a855f7" },
+  { id: 14, name: "Tabla del 8", values: [8], color: "#ec4899" },
+  { id: 15, name: "Mezcla 1 a 8", values: [1, 2, 3, 4, 5, 6, 7, 8], color: "#f43f5e" },
+  { id: 16, name: "Tabla del 9", values: [9], color: "#f59e0b" },
+  { id: 17, name: "Mezcla 1 a 9", values: [1, 2, 3, 4, 5, 6, 7, 8, 9], color: "#10b981" },
+  { id: 18, name: "Tabla del 10", values: [10], color: "#64748b" },
+  { id: 19, name: "Mezcla final", values: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], color: "#0f766e" },
+];
+
+const divisionLevels: Level[] = [
+  { id: 1, name: "Dividir entre 1", values: [1], color: "#22c55e" },
+  { id: 2, name: "Dividir entre 2", values: [2], color: "#06b6d4" },
+  { id: 3, name: "Mezcla 1 y 2", values: [1, 2], color: "#3b82f6" },
+  { id: 4, name: "Dividir entre 3", values: [3], color: "#8b5cf6" },
+  { id: 5, name: "Mezcla 1, 2 y 3", values: [1, 2, 3], color: "#d946ef" },
+  { id: 6, name: "Dividir entre 4", values: [4], color: "#f97316" },
+  { id: 7, name: "Mezcla 1 a 4", values: [1, 2, 3, 4], color: "#ef4444" },
+  { id: 8, name: "Dividir entre 5", values: [5], color: "#eab308" },
+  { id: 9, name: "Mezcla 1 a 5", values: [1, 2, 3, 4, 5], color: "#84cc16" },
+  { id: 10, name: "Dividir entre 6", values: [6], color: "#14b8a6" },
 ];
 
 function randomInt(min: number, max: number) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function createQuestion(a: number, b: number): Question {
+function createMultiplicationQuestion(a: number, b: number): Question {
   return {
-    a,
-    b,
+    promptA: a,
+    promptB: b,
     answer: a * b,
-    key: `${a}x${b}`,
+    key: `m-${a}x${b}`,
   };
 }
 
-function generateRandomQuestion(
-  tables: number[],
+function createDivisionQuestion(divisor: number, result: number): Question {
+  const dividend = divisor * result;
+  return {
+    promptA: dividend,
+    promptB: divisor,
+    answer: result,
+    key: `d-${dividend}/${divisor}`,
+  };
+}
+
+function generateQuestionForMode(
+  mode: Mode,
+  values: number[],
   recentKeys: string[] = []
 ): Question {
   const possibleQuestions: Question[] = [];
 
-  for (const a of tables) {
-    for (let b = 1; b <= 10; b++) {
-      possibleQuestions.push(createQuestion(a, b));
+  if (mode === "multiplication") {
+    for (const a of values) {
+      for (let b = 1; b <= 10; b++) {
+        possibleQuestions.push(createMultiplicationQuestion(a, b));
+      }
+    }
+  } else {
+    for (const divisor of values) {
+      for (let result = 1; result <= 10; result++) {
+        possibleQuestions.push(createDivisionQuestion(divisor, result));
+      }
     }
   }
 
-  const filtered = possibleQuestions.filter(
-    (q) => !recentKeys.includes(q.key)
-  );
-
+  const filtered = possibleQuestions.filter((q) => !recentKeys.includes(q.key));
   const source = filtered.length > 0 ? filtered : possibleQuestions;
   return source[randomInt(0, source.length - 1)];
 }
 
-function getSavedProgress() {
-  const saved = localStorage.getItem(STORAGE_KEY);
+function getAllLevels(mode: Mode) {
+  return mode === "multiplication" ? multiplicationLevels : divisionLevels;
+}
+
+function getStorageKey(mode: Mode) {
+  return `${STORAGE_KEY}_${mode}`;
+}
+
+function getSavedProgress(mode: Mode) {
+  const saved = localStorage.getItem(getStorageKey(mode));
 
   if (!saved) {
     return {
@@ -98,9 +137,9 @@ function getSavedProgress() {
   }
 }
 
-function saveProgress(unlockedLevel: number, stars: number) {
+function saveProgress(mode: Mode, unlockedLevel: number, stars: number) {
   localStorage.setItem(
-    STORAGE_KEY,
+    getStorageKey(mode),
     JSON.stringify({
       unlockedLevel,
       stars,
@@ -108,18 +147,40 @@ function saveProgress(unlockedLevel: number, stars: number) {
   );
 }
 
+function getLessonText(mode: Mode, level: Level) {
+  if (mode === "multiplication") {
+    return {
+      title: "Lección rápida",
+      text: `Aquí aprenderás ${level.name.toLowerCase()}. Multiplicar es sumar varias veces el mismo número.`,
+      example: `Ejemplo: ${level.values[0] ?? 2} × 3 = ${(level.values[0] ?? 2) * 3}`,
+    };
+  }
+
+  const divisor = level.values[0] ?? 2;
+  const dividend = divisor * 4;
+
+  return {
+    title: "Lección rápida",
+    text: `Dividir es repartir en partes iguales. Si repartes ${dividend} en grupos de ${divisor}, obtienes 4 grupos.`,
+    example: `Ejemplo: ${dividend} ÷ ${divisor} = 4`,
+  };
+}
+
 export default function App() {
-  const saved = getSavedProgress();
+  const [mode, setMode] = useState<Mode>("multiplication");
+  const saved = getSavedProgress(mode);
+  const levels = getAllLevels(mode);
 
   const [currentLevel, setCurrentLevel] = useState(1);
   const [unlockedLevel, setUnlockedLevel] = useState<number>(saved.unlockedLevel);
   const [stars, setStars] = useState<number>(saved.stars);
-  const [started, setStarted] = useState(false);
+
+  const [screen, setScreen] = useState<"map" | "lesson" | "play" | "result">("map");
+
   const [score, setScore] = useState(0);
   const [questionNumber, setQuestionNumber] = useState(1);
   const [userAnswer, setUserAnswer] = useState("");
   const [feedback, setFeedback] = useState("");
-  const [finished, setFinished] = useState(false);
   const [hearts, setHearts] = useState(MAX_HEARTS);
   const [lastResult, setLastResult] = useState<"correct" | "wrong" | "">("");
   const [retryQueue, setRetryQueue] = useState<Question[]>([]);
@@ -128,11 +189,11 @@ export default function App() {
 
   const levelData = useMemo(
     () => levels.find((l) => l.id === currentLevel) ?? levels[0],
-    [currentLevel]
+    [currentLevel, levels]
   );
 
   const [question, setQuestion] = useState<Question>(
-    generateRandomQuestion(levels[0].tables, [])
+    generateQuestionForMode(mode, levels[0].values, [])
   );
 
   const progressPercent = Math.round(
@@ -143,14 +204,15 @@ export default function App() {
     ((unlockedLevel - 1) / levels.length) * 100
   );
 
-  const startLevel = (levelId: number) => {
-    if (levelId > unlockedLevel) return;
+  function switchMode(newMode: Mode) {
+    const newSaved = getSavedProgress(newMode);
+    const newLevels = getAllLevels(newMode);
 
-    const selected = levels.find((l) => l.id === levelId) ?? levels[0];
-
-    setCurrentLevel(selected.id);
-    setStarted(true);
-    setFinished(false);
+    setMode(newMode);
+    setCurrentLevel(1);
+    setUnlockedLevel(newSaved.unlockedLevel);
+    setStars(newSaved.stars);
+    setScreen("map");
     setScore(0);
     setQuestionNumber(1);
     setUserAnswer("");
@@ -160,14 +222,36 @@ export default function App() {
     setRetryQueue([]);
     setWrongAnswers(0);
     setRecentQuestionKeys([]);
-    setQuestion(generateRandomQuestion(selected.tables, []));
-  };
+    setQuestion(generateQuestionForMode(newMode, newLevels[0].values, []));
+  }
 
-  const getNextQuestion = (
-    tables: number[],
+  function startLesson(levelId: number) {
+    if (levelId > unlockedLevel) return;
+
+    const selected = levels.find((l) => l.id === levelId) ?? levels[0];
+    setCurrentLevel(selected.id);
+    setScreen("lesson");
+  }
+
+  function startLevelPlay() {
+    setScreen("play");
+    setScore(0);
+    setQuestionNumber(1);
+    setUserAnswer("");
+    setFeedback("");
+    setHearts(MAX_HEARTS);
+    setLastResult("");
+    setRetryQueue([]);
+    setWrongAnswers(0);
+    setRecentQuestionKeys([]);
+    setQuestion(generateQuestionForMode(mode, levelData.values, []));
+  }
+
+  function getNextQuestion(
+    values: number[],
     queue: Question[],
     recentKeys: string[]
-  ) => {
+  ) {
     if (queue.length > 0) {
       const retryIndex = queue.findIndex(
         (item) => !recentKeys.includes(item.key)
@@ -185,10 +269,10 @@ export default function App() {
       return nextRetry;
     }
 
-    return generateRandomQuestion(tables, recentKeys);
-  };
+    return generateQuestionForMode(mode, values, recentKeys);
+  }
 
-  const submitAnswer = () => {
+  function submitAnswer() {
     const value = Number(userAnswer);
 
     if (userAnswer.trim() === "" || Number.isNaN(value)) {
@@ -230,8 +314,6 @@ export default function App() {
     const retryPending = newRetryQueue.length > 0;
 
     if (noMoreHearts || (baseQuestionsDone && !retryPending)) {
-      setFinished(true);
-
       let newUnlockedLevel = unlockedLevel;
       let newStars = stars;
 
@@ -246,7 +328,8 @@ export default function App() {
         setStars(newStars);
       }
 
-      saveProgress(newUnlockedLevel, newStars);
+      saveProgress(mode, newUnlockedLevel, newStars);
+      setScreen("result");
       return;
     }
 
@@ -260,24 +343,24 @@ export default function App() {
       setRecentQuestionKeys(updatedRecentKeys);
 
       const nextQuestion = getNextQuestion(
-        levelData.tables,
+        levelData.values,
         newRetryQueue,
         updatedRecentKeys
       );
 
       setQuestion(nextQuestion);
     }, 700);
-  };
+  }
 
   const passed = score >= PASS_SCORE && hearts > 0;
+  const lesson = getLessonText(mode, levelData);
 
-  const resetProgress = () => {
-    localStorage.removeItem(STORAGE_KEY);
+  function resetProgress() {
+    localStorage.removeItem(getStorageKey(mode));
     setUnlockedLevel(1);
     setStars(0);
     setCurrentLevel(1);
-    setStarted(false);
-    setFinished(false);
+    setScreen("map");
     setScore(0);
     setQuestionNumber(1);
     setUserAnswer("");
@@ -287,8 +370,8 @@ export default function App() {
     setRetryQueue([]);
     setWrongAnswers(0);
     setRecentQuestionKeys([]);
-    setQuestion(generateRandomQuestion(levels[0].tables, []));
-  };
+    setQuestion(generateQuestionForMode(mode, levels[0].values, []));
+  }
 
   const cardStyle: React.CSSProperties = {
     background: "#ffffff",
@@ -330,6 +413,17 @@ export default function App() {
     cursor: "pointer",
   };
 
+  const modeButton = (active: boolean): React.CSSProperties => ({
+    background: active ? "#0f172a" : "#e2e8f0",
+    color: active ? "white" : "#0f172a",
+    border: "none",
+    borderRadius: "999px",
+    padding: "10px 16px",
+    fontSize: "16px",
+    fontWeight: "bold",
+    cursor: "pointer",
+  });
+
   return (
     <div
       style={{
@@ -362,7 +456,7 @@ export default function App() {
                 🦉 DuoliJingo Matemático
               </div>
               <h1 style={{ margin: 0, fontSize: "42px", lineHeight: 1.1 }}>
-                Aprende tablas paso a paso
+                Aprende matemáticas paso a paso
               </h1>
               <p
                 style={{
@@ -372,7 +466,7 @@ export default function App() {
                   opacity: 0.95,
                 }}
               >
-                Aprende una tabla, mézclala con otras y refuerza los errores antes de cerrar el nivel.
+                Lección corta, práctica, repaso de errores y evaluación.
               </p>
             </div>
 
@@ -407,35 +501,39 @@ export default function App() {
                 />
               </div>
 
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: "12px",
-                }}
-              >
+              <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}>
                 <div>
-                  <div style={{ fontSize: "13px", opacity: 0.85 }}>
-                    Desbloqueado
-                  </div>
-                  <div style={{ fontSize: "24px", fontWeight: "bold" }}>
-                    Nivel {unlockedLevel}
-                  </div>
+                  <div style={{ fontSize: "13px", opacity: 0.85 }}>Desbloqueado</div>
+                  <div style={{ fontSize: "24px", fontWeight: "bold" }}>Nivel {unlockedLevel}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: "13px", opacity: 0.85 }}>
-                    Estrellas
-                  </div>
-                  <div style={{ fontSize: "24px", fontWeight: "bold" }}>
-                    ⭐ {stars}
-                  </div>
+                  <div style={{ fontSize: "13px", opacity: 0.85 }}>Estrellas</div>
+                  <div style={{ fontSize: "24px", fontWeight: "bold" }}>⭐ {stars}</div>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        {!started && (
+        <div style={{ ...cardStyle, marginBottom: "24px" }}>
+          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
+            <div style={{ fontWeight: "bold", color: "#334155" }}>Tema:</div>
+            <button
+              onClick={() => switchMode("multiplication")}
+              style={modeButton(mode === "multiplication")}
+            >
+              ✖️ Multiplicación
+            </button>
+            <button
+              onClick={() => switchMode("division")}
+              style={modeButton(mode === "division")}
+            >
+              ➗ División
+            </button>
+          </div>
+        </div>
+
+        {screen === "map" && (
           <>
             <div style={{ ...cardStyle, marginBottom: "24px" }}>
               <div
@@ -448,13 +546,7 @@ export default function App() {
                 }}
               >
                 <div>
-                  <h2
-                    style={{
-                      marginTop: 0,
-                      marginBottom: "8px",
-                      fontSize: "30px",
-                    }}
-                  >
+                  <h2 style={{ marginTop: 0, marginBottom: "8px", fontSize: "30px" }}>
                     Mapa de niveles
                   </h2>
                   <p style={{ margin: 0, color: "#475569", fontSize: "17px" }}>
@@ -493,7 +585,7 @@ export default function App() {
                 return (
                   <button
                     key={level.id}
-                    onClick={() => startLevel(level.id)}
+                    onClick={() => startLesson(level.id)}
                     disabled={locked}
                     style={{
                       textAlign: "left",
@@ -570,7 +662,7 @@ export default function App() {
                             ? "Bloqueado hasta superar el nivel anterior."
                             : completed
                             ? "Ya superado. Puedes repetirlo."
-                            : "Disponible para jugar."}
+                            : "Incluye lección y ejercicios."}
                         </div>
                       </div>
                     </div>
@@ -581,14 +673,55 @@ export default function App() {
           </>
         )}
 
-        {started && !finished && (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "minmax(0, 1fr)",
-              gap: "20px",
-            }}
-          >
+        {screen === "lesson" && (
+          <div style={cardStyle}>
+            <div
+              style={{
+                display: "inline-block",
+                background: levelData.color,
+                color: "white",
+                borderRadius: "999px",
+                padding: "8px 14px",
+                fontWeight: "bold",
+                marginBottom: "16px",
+              }}
+            >
+              {levelData.name}
+            </div>
+
+            <h2 style={{ marginTop: 0, fontSize: "34px" }}>{lesson.title}</h2>
+            <p style={{ fontSize: "22px", color: "#334155", lineHeight: 1.5 }}>
+              {lesson.text}
+            </p>
+
+            <div
+              style={{
+                background: "#eff6ff",
+                borderRadius: "20px",
+                padding: "20px",
+                fontSize: "28px",
+                fontWeight: "bold",
+                color: "#1e3a8a",
+                margin: "24px 0",
+                textAlign: "center",
+              }}
+            >
+              {lesson.example}
+            </div>
+
+            <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+              <button onClick={startLevelPlay} style={greenButton}>
+                Empezar ejercicios
+              </button>
+              <button onClick={() => setScreen("map")} style={grayButton}>
+                Volver al mapa
+              </button>
+            </div>
+          </div>
+        )}
+
+        {screen === "play" && (
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: "20px" }}>
             <div style={cardStyle}>
               <div
                 style={{
@@ -615,8 +748,7 @@ export default function App() {
                     {levelData.name}
                   </div>
                   <h2 style={{ margin: 0, fontSize: "30px" }}>
-                    Pregunta {Math.min(questionNumber, QUESTIONS_PER_LEVEL)} de{" "}
-                    {QUESTIONS_PER_LEVEL}
+                    Pregunta {Math.min(questionNumber, QUESTIONS_PER_LEVEL)} de {QUESTIONS_PER_LEVEL}
                   </h2>
                 </div>
 
@@ -688,12 +820,8 @@ export default function App() {
                   fontSize: "16px",
                 }}
               >
-                <div>
-                  Errores del nivel: <strong>{wrongAnswers}</strong>
-                </div>
-                <div>
-                  Repasos pendientes: <strong>{retryQueue.length}</strong>
-                </div>
+                <div>Errores del nivel: <strong>{wrongAnswers}</strong></div>
+                <div>Repasos pendientes: <strong>{retryQueue.length}</strong></div>
               </div>
 
               <div
@@ -705,7 +833,9 @@ export default function App() {
                   margin: "40px 0 30px",
                 }}
               >
-                {question.a} × {question.b}
+                {mode === "multiplication"
+                  ? `${question.promptA} × ${question.promptB}`
+                  : `${question.promptA} ÷ ${question.promptB}`}
               </div>
 
               <div
@@ -740,7 +870,7 @@ export default function App() {
                   Responder
                 </button>
 
-                <button onClick={() => setStarted(false)} style={grayButton}>
+                <button onClick={() => setScreen("map")} style={grayButton}>
                   Salir
                 </button>
               </div>
@@ -766,7 +896,7 @@ export default function App() {
           </div>
         )}
 
-        {finished && (
+        {screen === "result" && (
           <div style={cardStyle}>
             <div style={{ textAlign: "center" }}>
               <div style={{ fontSize: "72px", marginBottom: "10px" }}>
@@ -798,7 +928,7 @@ export default function App() {
                 {passed
                   ? "Sí puede avanzar. Además, las preguntas falladas fueron reforzadas antes de cerrar el nivel."
                   : hearts <= 0
-                  ? "Se quedó sin corazones. Conviene repetir y reforzar esta tabla antes de seguir."
+                  ? "Se quedó sin corazones. Conviene repetir y reforzar este tema antes de seguir."
                   : "No alcanzó el puntaje mínimo. Repetir aquí es mejor que avanzar con huecos."}
               </p>
 
@@ -817,12 +947,8 @@ export default function App() {
                     padding: "18px",
                   }}
                 >
-                  <div style={{ color: "#64748b", marginBottom: "8px" }}>
-                    Resultado
-                  </div>
-                  <div style={{ fontSize: "36px", fontWeight: "bold" }}>
-                    {score}/10
-                  </div>
+                  <div style={{ color: "#64748b", marginBottom: "8px" }}>Resultado</div>
+                  <div style={{ fontSize: "36px", fontWeight: "bold" }}>{score}/10</div>
                 </div>
 
                 <div
@@ -832,12 +958,8 @@ export default function App() {
                     padding: "18px",
                   }}
                 >
-                  <div style={{ color: "#64748b", marginBottom: "8px" }}>
-                    Corazones
-                  </div>
-                  <div style={{ fontSize: "36px", fontWeight: "bold" }}>
-                    {hearts}
-                  </div>
+                  <div style={{ color: "#64748b", marginBottom: "8px" }}>Corazones</div>
+                  <div style={{ fontSize: "36px", fontWeight: "bold" }}>{hearts}</div>
                 </div>
 
                 <div
@@ -847,12 +969,8 @@ export default function App() {
                     padding: "18px",
                   }}
                 >
-                  <div style={{ color: "#64748b", marginBottom: "8px" }}>
-                    Estrellas
-                  </div>
-                  <div style={{ fontSize: "36px", fontWeight: "bold" }}>
-                    ⭐ {stars}
-                  </div>
+                  <div style={{ color: "#64748b", marginBottom: "8px" }}>Estrellas</div>
+                  <div style={{ fontSize: "36px", fontWeight: "bold" }}>⭐ {stars}</div>
                 </div>
 
                 <div
@@ -862,12 +980,8 @@ export default function App() {
                     padding: "18px",
                   }}
                 >
-                  <div style={{ color: "#64748b", marginBottom: "8px" }}>
-                    Errores
-                  </div>
-                  <div style={{ fontSize: "36px", fontWeight: "bold" }}>
-                    {wrongAnswers}
-                  </div>
+                  <div style={{ color: "#64748b", marginBottom: "8px" }}>Errores</div>
+                  <div style={{ fontSize: "36px", fontWeight: "bold" }}>{wrongAnswers}</div>
                 </div>
               </div>
 
@@ -879,20 +993,23 @@ export default function App() {
                   flexWrap: "wrap",
                 }}
               >
-                <button onClick={() => startLevel(currentLevel)} style={greenButton}>
+                <button onClick={() => setScreen("lesson")} style={greenButton}>
                   Repetir nivel
                 </button>
 
                 {passed && currentLevel < levels.length && (
                   <button
-                    onClick={() => startLevel(currentLevel + 1)}
+                    onClick={() => {
+                      setCurrentLevel(currentLevel + 1);
+                      setScreen("lesson");
+                    }}
                     style={primaryButton}
                   >
                     Siguiente nivel
                   </button>
                 )}
 
-                <button onClick={() => setStarted(false)} style={grayButton}>
+                <button onClick={() => setScreen("map")} style={grayButton}>
                   Volver al mapa
                 </button>
               </div>
