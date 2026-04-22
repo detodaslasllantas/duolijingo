@@ -1,13 +1,43 @@
 import { useMemo, useState } from "react";
 
-type Mode = "multiplication" | "division";
+type Mode = "multiplication" | "division" | "fractions";
+type FractionVisualKind = "bar" | "circle" | "square";
 
-type Question = {
+type BaseQuestion = {
+  key: string;
+};
+
+type ArithmeticQuestion = BaseQuestion & {
+  type: "arithmetic";
   promptA: number;
   promptB: number;
   answer: number;
-  key: string;
 };
+
+type FractionRecognitionQuestion = BaseQuestion & {
+  type: "fraction_recognition";
+  numerator: number;
+  denominator: number;
+  answer: string;
+  options: string[];
+  visualKind: FractionVisualKind;
+};
+
+type FractionCompareQuestion = BaseQuestion & {
+  type: "fraction_compare";
+  leftNumerator: number;
+  leftDenominator: number;
+  leftVisualKind: FractionVisualKind;
+  rightNumerator: number;
+  rightDenominator: number;
+  rightVisualKind: FractionVisualKind;
+  answer: "left" | "right";
+};
+
+type Question =
+  | ArithmeticQuestion
+  | FractionRecognitionQuestion
+  | FractionCompareQuestion;
 
 type Level = {
   id: number;
@@ -16,10 +46,8 @@ type Level = {
   color: string;
 };
 
-const PASS_SCORE = 8;
-const QUESTIONS_PER_LEVEL = 10;
 const MAX_HEARTS = 3;
-const STORAGE_KEY = "duolijingo_progress_v5";
+const STORAGE_KEY = "duolijingo_progress_v14";
 
 const multiplicationLevels: Level[] = [
   { id: 1, name: "Tabla del 1", values: [1], color: "#22c55e" },
@@ -56,12 +84,112 @@ const divisionLevels: Level[] = [
   { id: 10, name: "Dividir entre 6", values: [6], color: "#14b8a6" },
 ];
 
+const fractionLevels: Level[] = [
+  { id: 1, name: "Mitades", values: [2], color: "#22c55e" },
+  { id: 2, name: "Tercios", values: [3], color: "#06b6d4" },
+  { id: 3, name: "Cuartos", values: [4], color: "#8b5cf6" },
+  { id: 4, name: "Quintos", values: [5], color: "#f97316" },
+  { id: 5, name: "Mezcla visual", values: [2, 3, 4, 5], color: "#ef4444" },
+  { id: 6, name: "Comparar fracciones", values: [2, 3, 4, 5], color: "#0ea5e9" },
+];
+
 function randomInt(min: number, max: number) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function createMultiplicationQuestion(a: number, b: number): Question {
+function shuffleArray<T>(arr: T[]) {
+  return [...arr].sort(() => Math.random() - 0.5);
+}
+
+function getAllLevels(mode: Mode) {
+  if (mode === "multiplication") return multiplicationLevels;
+  if (mode === "division") return divisionLevels;
+  return fractionLevels;
+}
+
+function getStorageKey(mode: Mode) {
+  return `${STORAGE_KEY}_${mode}`;
+}
+
+function getSavedProgress(mode: Mode) {
+  const saved = localStorage.getItem(getStorageKey(mode));
+  if (!saved) return { unlockedLevel: 1, stars: 0 };
+
+  try {
+    const parsed = JSON.parse(saved);
+    return {
+      unlockedLevel: parsed.unlockedLevel ?? 1,
+      stars: parsed.stars ?? 0,
+    };
+  } catch {
+    return { unlockedLevel: 1, stars: 0 };
+  }
+}
+
+function saveProgress(mode: Mode, unlockedLevel: number, stars: number) {
+  localStorage.setItem(
+    getStorageKey(mode),
+    JSON.stringify({ unlockedLevel, stars })
+  );
+}
+
+function gcd(a: number, b: number): number {
+  let x = Math.abs(a);
+  let y = Math.abs(b);
+
+  while (y !== 0) {
+    const t = y;
+    y = x % y;
+    x = t;
+  }
+
+  return x;
+}
+
+function normalizeFraction(numerator: number, denominator: number) {
+  const d = gcd(numerator, denominator);
+  return `${numerator / d}/${denominator / d}`;
+}
+
+function parseFraction(value: string) {
+  const [n, d] = value.split("/").map(Number);
+  return { numerator: n, denominator: d };
+}
+
+function fractionValue(numerator: number, denominator: number) {
+  return numerator / denominator;
+}
+
+function getQuestionsPerLevel(mode: Mode, levelId: number) {
+  if (mode !== "fractions") return 10;
+  if (levelId === 1) return 3;
+  if (levelId === 2) return 4;
+  if (levelId === 3) return 4;
+  if (levelId === 4) return 5;
+  if (levelId === 5) return 8;
+  return 8;
+}
+
+function getPassScore(mode: Mode, levelId: number, totalQuestions: number) {
+  if (mode !== "fractions") return 8;
+  if (levelId === 1) return 3;
+  if (levelId === 2) return 3;
+  if (levelId === 3) return 3;
+  if (levelId === 4) return 4;
+  if (levelId === 5) return 6;
+  return 6;
+}
+
+function getFractionVisualKinds(denominator: number): FractionVisualKind[] {
+  if (denominator === 2) return ["bar", "circle", "square"];
+  if (denominator === 3) return ["bar", "circle", "square"];
+  if (denominator === 4) return ["bar", "circle", "square"];
+  return ["bar"];
+}
+
+function createMultiplicationQuestion(a: number, b: number): ArithmeticQuestion {
   return {
+    type: "arithmetic",
     promptA: a,
     promptB: b,
     answer: a * b,
@@ -69,9 +197,10 @@ function createMultiplicationQuestion(a: number, b: number): Question {
   };
 }
 
-function createDivisionQuestion(divisor: number, result: number): Question {
+function createDivisionQuestion(divisor: number, result: number): ArithmeticQuestion {
   const dividend = divisor * result;
   return {
+    type: "arithmetic",
     promptA: dividend,
     promptB: divisor,
     answer: result,
@@ -79,10 +208,93 @@ function createDivisionQuestion(divisor: number, result: number): Question {
   };
 }
 
+function createFractionRecognitionQuestion(
+  numerator: number,
+  denominator: number,
+  visualKind: FractionVisualKind
+): FractionRecognitionQuestion {
+  const answer = `${numerator}/${denominator}`;
+  const answerNormalized = normalizeFraction(numerator, denominator);
+
+  const globalFractionPool = [
+    "1/2",
+    "1/3",
+    "2/3",
+    "1/4",
+    "2/4",
+    "3/4",
+    "1/5",
+    "2/5",
+    "3/5",
+    "4/5",
+  ];
+
+  const wrongOptions = shuffleArray(
+    globalFractionPool.filter((option) => {
+      const parsed = parseFraction(option);
+      return normalizeFraction(parsed.numerator, parsed.denominator) !== answerNormalized;
+    })
+  ).slice(0, 2);
+
+  const options = shuffleArray([answer, ...wrongOptions]);
+
+  return {
+    type: "fraction_recognition",
+    numerator,
+    denominator,
+    answer,
+    options,
+    visualKind,
+    key: `fr-${numerator}/${denominator}-${visualKind}`,
+  };
+}
+
+function createFractionCompareQuestion(values: number[]): FractionCompareQuestion {
+  const pool: Array<{ n: number; d: number }> = [];
+
+  for (const d of values) {
+    for (let n = 1; n < d; n++) {
+      pool.push({ n, d });
+    }
+  }
+
+  let left = pool[randomInt(0, pool.length - 1)];
+  let right = pool[randomInt(0, pool.length - 1)];
+
+  let attempts = 0;
+  while (
+    (normalizeFraction(left.n, left.d) === normalizeFraction(right.n, right.d) ||
+      fractionValue(left.n, left.d) === fractionValue(right.n, right.d)) &&
+    attempts < 50
+  ) {
+    right = pool[randomInt(0, pool.length - 1)];
+    attempts++;
+  }
+
+  const answer =
+    fractionValue(left.n, left.d) > fractionValue(right.n, right.d) ? "left" : "right";
+
+  const leftKinds = getFractionVisualKinds(left.d);
+  const rightKinds = getFractionVisualKinds(right.d);
+
+  return {
+    type: "fraction_compare",
+    leftNumerator: left.n,
+    leftDenominator: left.d,
+    leftVisualKind: leftKinds[randomInt(0, leftKinds.length - 1)],
+    rightNumerator: right.n,
+    rightDenominator: right.d,
+    rightVisualKind: rightKinds[randomInt(0, rightKinds.length - 1)],
+    answer,
+    key: `fc-${left.n}/${left.d}-${right.n}/${right.d}-${answer}`,
+  };
+}
+
 function generateQuestionForMode(
   mode: Mode,
   values: number[],
-  recentKeys: string[] = []
+  recentKeys: string[] = [],
+  levelId = 1
 ): Question {
   const possibleQuestions: Question[] = [];
 
@@ -92,10 +304,27 @@ function generateQuestionForMode(
         possibleQuestions.push(createMultiplicationQuestion(a, b));
       }
     }
-  } else {
+  } else if (mode === "division") {
     for (const divisor of values) {
       for (let result = 1; result <= 10; result++) {
         possibleQuestions.push(createDivisionQuestion(divisor, result));
+      }
+    }
+  } else {
+    if (levelId === 6) {
+      for (let i = 0; i < 30; i++) {
+        possibleQuestions.push(createFractionCompareQuestion(values));
+      }
+    } else {
+      for (const denominator of values) {
+        for (let numerator = 1; numerator < denominator; numerator++) {
+          const kinds = getFractionVisualKinds(denominator);
+          for (const kind of kinds) {
+            possibleQuestions.push(
+              createFractionRecognitionQuestion(numerator, denominator, kind)
+            );
+          }
+        }
       }
     }
   }
@@ -105,65 +334,315 @@ function generateQuestionForMode(
   return source[randomInt(0, source.length - 1)];
 }
 
-function getAllLevels(mode: Mode) {
-  return mode === "multiplication" ? multiplicationLevels : divisionLevels;
-}
+function getLessonText(mode: Mode, level: Level) {
+  if (mode === "multiplication") {
+    const n = level.values[0] ?? 2;
 
-function getStorageKey(mode: Mode) {
-  return `${STORAGE_KEY}_${mode}`;
-}
-
-function getSavedProgress(mode: Mode) {
-  const saved = localStorage.getItem(getStorageKey(mode));
-
-  if (!saved) {
     return {
-      unlockedLevel: 1,
-      stars: 0,
+      title: "Multiplicar es sumar varias veces",
+      text: `Multiplicar es sumar el mismo número varias veces.\n\nSi tienes ${n} grupos de 3, estás sumando 3 + 3 + 3...`,
+      example: `${n} × 3 = ${n * 3}`,
     };
   }
 
-  try {
-    const parsed = JSON.parse(saved);
+  if (mode === "division") {
+    const divisor = level.values[0] ?? 2;
+    const dividend = divisor * 4;
+
     return {
-      unlockedLevel: parsed.unlockedLevel ?? 1,
-      stars: parsed.stars ?? 0,
-    };
-  } catch {
-    return {
-      unlockedLevel: 1,
-      stars: 0,
+      title: "Dividir es repartir",
+      text: `Dividir es repartir en partes iguales.\n\nSi tienes ${dividend} cosas y las repartes en grupos de ${divisor}, obtienes grupos iguales.`,
+      example: `${dividend} ÷ ${divisor} = 4`,
     };
   }
+
+  if (level.id === 1) {
+    return {
+      title: "¿Qué es un medio?",
+      text: `Imagina una pizza partida en 2 partes iguales.\n\nSi tomas 1 parte, tienes un medio.`,
+      example: "1/2 = 1 de 2 partes iguales",
+    };
+  }
+
+  if (level.id === 2) {
+    return {
+      title: "¿Qué es un tercio?",
+      text: `Si divides algo en 3 partes iguales y tomas 1 parte,\n\neso es un tercio.`,
+      example: "1/3 = 1 de 3 partes iguales",
+    };
+  }
+
+  if (level.id === 3) {
+    return {
+      title: "¿Qué es un cuarto?",
+      text: `Si divides un entero en 4 partes iguales y tomas una,\n\neso es un cuarto.`,
+      example: "1/4 = 1 de 4 partes iguales",
+    };
+  }
+
+  if (level.id === 4) {
+    return {
+      title: "Partes de un entero",
+      text: `Una fracción muestra partes de un todo.\n\nMientras más partes tenga, más pequeñas son.`,
+      example: "1/5 = 1 de 5 partes iguales",
+    };
+  }
+
+  if (level.id === 5) {
+    return {
+      title: "Reconocer fracciones",
+      text: `Observa bien cuántas partes tiene la figura.\n\nDespués cuenta cuántas están pintadas.`,
+      example: "Numerador = partes pintadas",
+    };
+  }
+
+  return {
+    title: "¿Cuál es mayor?",
+    text: `Mira cuál figura tiene una parte más grande o más área pintada.\n\nEsa representa la fracción mayor.`,
+    example: "1/2 es mayor que 1/3",
+  };
 }
 
-function saveProgress(mode: Mode, unlockedLevel: number, stars: number) {
-  localStorage.setItem(
-    getStorageKey(mode),
-    JSON.stringify({
-      unlockedLevel,
-      stars,
-    })
+function getPedagogicalFeedback(question: Question, wasCorrect: boolean) {
+  if (question.type === "arithmetic") {
+    const isDivision = question.key.startsWith("d-");
+
+    if (isDivision) {
+      if (wasCorrect) {
+        return `✅ Correcto\n${question.promptA} ÷ ${question.promptB} = ${question.answer} porque ${question.promptA} repartido en ${question.promptB} grupos iguales da ${question.answer} en cada grupo.`;
+      }
+
+      return `❌ Incorrecto. Era ${question.answer}\n${question.promptA} ÷ ${question.promptB} = ${question.answer} porque al repartir ${question.promptA} en ${question.promptB} grupos iguales, quedan ${question.answer} en cada grupo.`;
+    }
+
+    if (wasCorrect) {
+      return `✅ Correcto\n${question.promptA} × ${question.promptB} = ${question.answer} porque son ${question.promptA} grupos de ${question.promptB}.`;
+    }
+
+    return `❌ Incorrecto. Era ${question.answer}\n${question.promptA} × ${question.promptB} = ${question.answer} porque son ${question.promptA} grupos de ${question.promptB}.`;
+  }
+
+  if (question.type === "fraction_recognition") {
+    if (wasCorrect) {
+      return `✅ Correcto\n${question.answer} significa ${question.numerator} parte${question.numerator > 1 ? "s" : ""} pintada${question.numerator > 1 ? "s" : ""} de ${question.denominator} partes iguales.`;
+    }
+
+    return `❌ Incorrecto. Era ${question.answer}\n${question.answer} significa ${question.numerator} parte${question.numerator > 1 ? "s" : ""} pintada${question.numerator > 1 ? "s" : ""} de ${question.denominator} partes iguales.`;
+  }
+
+  const leftValue = fractionValue(question.leftNumerator, question.leftDenominator);
+  const rightValue = fractionValue(question.rightNumerator, question.rightDenominator);
+  const winnerText = question.answer === "left" ? "la izquierda" : "la derecha";
+  const winnerFraction =
+    question.answer === "left"
+      ? `${question.leftNumerator}/${question.leftDenominator}`
+      : `${question.rightNumerator}/${question.rightDenominator}`;
+
+  const loserFraction =
+    question.answer === "left"
+      ? `${question.rightNumerator}/${question.rightDenominator}`
+      : `${question.leftNumerator}/${question.leftDenominator}`;
+
+  if (wasCorrect) {
+    return `✅ Correcto\nLa mayor es ${winnerFraction} (${winnerText}) porque representa una porción más grande que ${loserFraction}.`;
+  }
+
+  if (leftValue === rightValue) {
+    return `❌ Incorrecto\nEstas fracciones valen lo mismo.`;
+  }
+
+  return `❌ Incorrecto. La mayor era ${winnerText}\n${winnerFraction} es mayor que ${loserFraction} porque representa una porción más grande del entero.`;
+}
+
+function FractionBar({
+  numerator,
+  denominator,
+}: {
+  numerator: number;
+  denominator: number;
+}) {
+  return (
+    <div style={{ display: "flex", justifyContent: "center", marginTop: "16px" }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: `repeat(${denominator}, minmax(0, 1fr))`,
+          width: "min(720px, 90%)",
+          height: "90px",
+          border: "5px solid #1e293b",
+          borderRadius: "16px",
+          overflow: "hidden",
+          background: "#ffffff",
+        }}
+      >
+        {Array.from({ length: denominator }).map((_, i) => {
+          const filled = i < numerator;
+          const isLast = i === denominator - 1;
+
+          return (
+            <div
+              key={i}
+              style={{
+                background: filled ? "#22c55e" : "#ffffff",
+                borderRight: isLast ? "none" : "5px solid #1e293b",
+              }}
+            />
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
-function getLessonText(mode: Mode, level: Level) {
-  if (mode === "multiplication") {
-    return {
-      title: "Lección rápida",
-      text: `Aquí aprenderás ${level.name.toLowerCase()}. Multiplicar es sumar varias veces el mismo número.`,
-      example: `Ejemplo: ${level.values[0] ?? 2} × 3 = ${(level.values[0] ?? 2) * 3}`,
-    };
+function polarToCartesian(
+  cx: number,
+  cy: number,
+  r: number,
+  angleDeg: number
+) {
+  const angleRad = ((angleDeg - 90) * Math.PI) / 180;
+  return {
+    x: cx + r * Math.cos(angleRad),
+    y: cy + r * Math.sin(angleRad),
+  };
+}
+
+function describeSector(
+  cx: number,
+  cy: number,
+  r: number,
+  startAngle: number,
+  endAngle: number
+) {
+  const start = polarToCartesian(cx, cy, r, endAngle);
+  const end = polarToCartesian(cx, cy, r, startAngle);
+  const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
+
+  return [
+    `M ${cx} ${cy}`,
+    `L ${start.x} ${start.y}`,
+    `A ${r} ${r} 0 ${largeArcFlag} 0 ${end.x} ${end.y}`,
+    "Z",
+  ].join(" ");
+}
+
+function FractionCircle({
+  numerator,
+  denominator,
+}: {
+  numerator: number;
+  denominator: number;
+}) {
+  const size = 240;
+  const cx = 120;
+  const cy = 120;
+  const r = 105;
+
+  return (
+    <div style={{ display: "flex", justifyContent: "center", marginTop: "16px" }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        {Array.from({ length: denominator }).map((_, i) => {
+          const startAngle = (i * 360) / denominator;
+          const endAngle = ((i + 1) * 360) / denominator;
+          const filled = i < numerator;
+
+          return (
+            <path
+              key={i}
+              d={describeSector(cx, cy, r, startAngle, endAngle)}
+              fill={filled ? "#22c55e" : "#ffffff"}
+              stroke="#1e293b"
+              strokeWidth="5"
+            />
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+function FractionSquare({
+  numerator,
+  denominator,
+}: {
+  numerator: number;
+  denominator: number;
+}) {
+  if (denominator === 2 || denominator === 3) {
+    return (
+      <div style={{ display: "flex", justifyContent: "center", marginTop: "16px" }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: `repeat(${denominator}, 1fr)`,
+            width: "220px",
+            height: "220px",
+            border: "5px solid #1e293b",
+            background: "#ffffff",
+            overflow: "hidden",
+          }}
+        >
+          {Array.from({ length: denominator }).map((_, i) => (
+            <div
+              key={i}
+              style={{
+                background: i < numerator ? "#22c55e" : "#ffffff",
+                borderRight: i === denominator - 1 ? "none" : "5px solid #1e293b",
+              }}
+            />
+          ))}
+        </div>
+      </div>
+    );
   }
 
-  const divisor = level.values[0] ?? 2;
-  const dividend = divisor * 4;
+  return (
+    <div style={{ display: "flex", justifyContent: "center", marginTop: "16px" }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(2, 1fr)",
+          gridTemplateRows: "repeat(2, 1fr)",
+          width: "220px",
+          height: "220px",
+          border: "5px solid #1e293b",
+          background: "#ffffff",
+          overflow: "hidden",
+        }}
+      >
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div
+            key={i}
+            style={{
+              background: i < numerator ? "#22c55e" : "#ffffff",
+              borderRight: i % 2 === 1 ? "none" : "5px solid #1e293b",
+              borderBottom: i >= 2 ? "none" : "5px solid #1e293b",
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
 
-  return {
-    title: "Lección rápida",
-    text: `Dividir es repartir en partes iguales. Si repartes ${dividend} en grupos de ${divisor}, obtienes 4 grupos.`,
-    example: `Ejemplo: ${dividend} ÷ ${divisor} = 4`,
-  };
+function FractionVisual({
+  numerator,
+  denominator,
+  visualKind,
+}: {
+  numerator: number;
+  denominator: number;
+  visualKind: FractionVisualKind;
+}) {
+  if (visualKind === "circle") {
+    return <FractionCircle numerator={numerator} denominator={denominator} />;
+  }
+
+  if (visualKind === "square") {
+    return <FractionSquare numerator={numerator} denominator={denominator} />;
+  }
+
+  return <FractionBar numerator={numerator} denominator={denominator} />;
 }
 
 export default function App() {
@@ -174,7 +653,6 @@ export default function App() {
   const [currentLevel, setCurrentLevel] = useState(1);
   const [unlockedLevel, setUnlockedLevel] = useState<number>(saved.unlockedLevel);
   const [stars, setStars] = useState<number>(saved.stars);
-
   const [screen, setScreen] = useState<"map" | "lesson" | "play" | "result">("map");
 
   const [score, setScore] = useState(0);
@@ -192,12 +670,15 @@ export default function App() {
     [currentLevel, levels]
   );
 
+  const totalQuestions = getQuestionsPerLevel(mode, currentLevel);
+  const passScore = getPassScore(mode, currentLevel, totalQuestions);
+
   const [question, setQuestion] = useState<Question>(
-    generateQuestionForMode(mode, levels[0].values, [])
+    generateQuestionForMode(mode, levels[0].values, [], 1)
   );
 
   const progressPercent = Math.round(
-    (Math.min(questionNumber, QUESTIONS_PER_LEVEL) / QUESTIONS_PER_LEVEL) * 100
+    (Math.min(questionNumber, totalQuestions) / totalQuestions) * 100
   );
 
   const globalProgressPercent = Math.round(
@@ -222,12 +703,11 @@ export default function App() {
     setRetryQueue([]);
     setWrongAnswers(0);
     setRecentQuestionKeys([]);
-    setQuestion(generateQuestionForMode(newMode, newLevels[0].values, []));
+    setQuestion(generateQuestionForMode(newMode, newLevels[0].values, [], 1));
   }
 
   function startLesson(levelId: number) {
     if (levelId > unlockedLevel) return;
-
     const selected = levels.find((l) => l.id === levelId) ?? levels[0];
     setCurrentLevel(selected.id);
     setScreen("lesson");
@@ -244,7 +724,7 @@ export default function App() {
     setRetryQueue([]);
     setWrongAnswers(0);
     setRecentQuestionKeys([]);
-    setQuestion(generateQuestionForMode(mode, levelData.values, []));
+    setQuestion(generateQuestionForMode(mode, levelData.values, [], currentLevel));
   }
 
   function getNextQuestion(
@@ -269,31 +749,33 @@ export default function App() {
       return nextRetry;
     }
 
-    return generateQuestionForMode(mode, values, recentKeys);
+    return generateQuestionForMode(mode, values, recentKeys, currentLevel);
   }
 
-  function submitAnswer() {
-    const value = Number(userAnswer);
+  function handleAnswer(answerValue: string) {
+    let isCorrect = false;
 
-    if (userAnswer.trim() === "" || Number.isNaN(value)) {
-      setFeedback("Escribe una respuesta.");
-      return;
+    if (question.type === "fraction_recognition") {
+      isCorrect = answerValue === question.answer;
+    } else if (question.type === "fraction_compare") {
+      isCorrect = answerValue === question.answer;
+    } else {
+      isCorrect = Number(answerValue) === question.answer;
     }
 
     let newScore = score;
     let newHearts = hearts;
     let newWrongAnswers = wrongAnswers;
-    let newRetryQueue = [...retryQueue];
+    const newRetryQueue = [...retryQueue];
 
-    if (value === question.answer) {
+    setFeedback(getPedagogicalFeedback(question, isCorrect));
+    setLastResult(isCorrect ? "correct" : "wrong");
+
+    if (isCorrect) {
       newScore += 1;
-      setFeedback("✅ Correcto");
-      setLastResult("correct");
     } else {
       newHearts -= 1;
       newWrongAnswers += 1;
-      setFeedback(`❌ Incorrecto. Era ${question.answer}`);
-      setLastResult("wrong");
 
       const alreadyQueued = newRetryQueue.some(
         (item) => item.key === question.key
@@ -310,20 +792,18 @@ export default function App() {
     setRetryQueue(newRetryQueue);
 
     const noMoreHearts = newHearts <= 0;
-    const baseQuestionsDone = questionNumber >= QUESTIONS_PER_LEVEL;
+    const baseQuestionsDone = questionNumber >= totalQuestions;
     const retryPending = newRetryQueue.length > 0;
 
     if (noMoreHearts || (baseQuestionsDone && !retryPending)) {
       let newUnlockedLevel = unlockedLevel;
       let newStars = stars;
 
-      if (newScore >= PASS_SCORE && newHearts > 0) {
+      if (newScore >= passScore && newHearts > 0) {
         newUnlockedLevel = Math.min(currentLevel + 1, levels.length);
-
         if (newUnlockedLevel > unlockedLevel) {
           setUnlockedLevel(newUnlockedLevel);
         }
-
         newStars += 1;
         setStars(newStars);
       }
@@ -349,10 +829,23 @@ export default function App() {
       );
 
       setQuestion(nextQuestion);
-    }, 700);
+    }, 1400);
   }
 
-  const passed = score >= PASS_SCORE && hearts > 0;
+  function submitAnswer() {
+    if (question.type !== "arithmetic") return;
+
+    const value = Number(userAnswer);
+
+    if (userAnswer.trim() === "" || Number.isNaN(value)) {
+      setFeedback("Escribe una respuesta.");
+      return;
+    }
+
+    handleAnswer(userAnswer);
+  }
+
+  const passed = score >= passScore && hearts > 0;
   const lesson = getLessonText(mode, levelData);
 
   function resetProgress() {
@@ -370,7 +863,7 @@ export default function App() {
     setRetryQueue([]);
     setWrongAnswers(0);
     setRecentQuestionKeys([]);
-    setQuestion(generateQuestionForMode(mode, levels[0].values, []));
+    setQuestion(generateQuestionForMode(mode, levels[0].values, [], 1));
   }
 
   const cardStyle: React.CSSProperties = {
@@ -422,6 +915,18 @@ export default function App() {
     fontSize: "16px",
     fontWeight: "bold",
     cursor: "pointer",
+  });
+
+  const answerOptionStyle = (disabled = false): React.CSSProperties => ({
+    background: disabled ? "#cbd5e1" : "#2563eb",
+    color: "white",
+    border: "none",
+    borderRadius: "16px",
+    padding: "16px 24px",
+    fontSize: "24px",
+    fontWeight: "bold",
+    cursor: disabled ? "not-allowed" : "pointer",
+    minWidth: "140px",
   });
 
   return (
@@ -530,6 +1035,12 @@ export default function App() {
             >
               ➗ División
             </button>
+            <button
+              onClick={() => switchMode("fractions")}
+              style={modeButton(mode === "fractions")}
+            >
+              🟩 Fracciones
+            </button>
           </div>
         </div>
 
@@ -550,7 +1061,7 @@ export default function App() {
                     Mapa de niveles
                   </h2>
                   <p style={{ margin: 0, color: "#475569", fontSize: "17px" }}>
-                    Necesita al menos <strong>{PASS_SCORE}/10</strong>, no quedarse sin corazones y corregir errores frecuentes.
+                    Necesita al menos <strong>{passScore}/{totalQuestions}</strong> en este nivel y no quedarse sin corazones.
                   </p>
                 </div>
 
@@ -581,6 +1092,8 @@ export default function App() {
               {levels.map((level) => {
                 const locked = level.id > unlockedLevel;
                 const completed = level.id < unlockedLevel;
+                const levelQuestions = getQuestionsPerLevel(mode, level.id);
+                const levelPass = getPassScore(mode, level.id, levelQuestions);
 
                 return (
                   <button
@@ -662,7 +1175,7 @@ export default function App() {
                             ? "Bloqueado hasta superar el nivel anterior."
                             : completed
                             ? "Ya superado. Puedes repetirlo."
-                            : "Incluye lección y ejercicios."}
+                            : `${levelQuestions} preguntas • pase ${levelPass}/${levelQuestions}`}
                         </div>
                       </div>
                     </div>
@@ -690,24 +1203,71 @@ export default function App() {
             </div>
 
             <h2 style={{ marginTop: 0, fontSize: "34px" }}>{lesson.title}</h2>
-            <p style={{ fontSize: "22px", color: "#334155", lineHeight: 1.5 }}>
+            <p
+              style={{
+                fontSize: "22px",
+                color: "#334155",
+                lineHeight: 1.5,
+                whiteSpace: "pre-line",
+              }}
+            >
               {lesson.text}
             </p>
 
-            <div
-              style={{
-                background: "#eff6ff",
-                borderRadius: "20px",
-                padding: "20px",
-                fontSize: "28px",
-                fontWeight: "bold",
-                color: "#1e3a8a",
-                margin: "24px 0",
-                textAlign: "center",
-              }}
-            >
-              {lesson.example}
-            </div>
+            {mode === "fractions" ? (
+              <div
+                style={{
+                  background: "#eff6ff",
+                  borderRadius: "20px",
+                  padding: "20px",
+                  margin: "24px 0",
+                  textAlign: "center",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "28px",
+                    fontWeight: "bold",
+                    color: "#1e3a8a",
+                    marginBottom: "12px",
+                  }}
+                >
+                  {lesson.example}
+                </div>
+                {levelData.id === 6 ? (
+                  <div style={{ display: "grid", gap: "16px", justifyItems: "center" }}>
+                    <div style={{ width: "100%" }}>
+                      <div style={{ fontWeight: "bold", marginBottom: "8px" }}>A</div>
+                      <FractionBar numerator={1} denominator={2} />
+                    </div>
+                    <div style={{ width: "100%" }}>
+                      <div style={{ fontWeight: "bold", marginBottom: "8px" }}>B</div>
+                      <FractionBar numerator={1} denominator={3} />
+                    </div>
+                  </div>
+                ) : (
+                  <FractionBar
+                    numerator={1}
+                    denominator={levelData.values[0] ?? 2}
+                  />
+                )}
+              </div>
+            ) : (
+              <div
+                style={{
+                  background: "#eff6ff",
+                  borderRadius: "20px",
+                  padding: "20px",
+                  fontSize: "28px",
+                  fontWeight: "bold",
+                  color: "#1e3a8a",
+                  margin: "24px 0",
+                  textAlign: "center",
+                }}
+              >
+                {lesson.example}
+              </div>
+            )}
 
             <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
               <button onClick={startLevelPlay} style={greenButton}>
@@ -748,7 +1308,7 @@ export default function App() {
                     {levelData.name}
                   </div>
                   <h2 style={{ margin: 0, fontSize: "30px" }}>
-                    Pregunta {Math.min(questionNumber, QUESTIONS_PER_LEVEL)} de {QUESTIONS_PER_LEVEL}
+                    Pregunta {Math.min(questionNumber, totalQuestions)} de {totalQuestions}
                   </h2>
                 </div>
 
@@ -824,74 +1384,228 @@ export default function App() {
                 <div>Repasos pendientes: <strong>{retryQueue.length}</strong></div>
               </div>
 
-              <div
-                style={{
-                  textAlign: "center",
-                  fontSize: "72px",
-                  fontWeight: "bold",
-                  color: "#0f172a",
-                  margin: "40px 0 30px",
-                }}
-              >
-                {mode === "multiplication"
-                  ? `${question.promptA} × ${question.promptB}`
-                  : `${question.promptA} ÷ ${question.promptB}`}
-              </div>
+              {question.type === "fraction_recognition" ? (
+                <div style={{ textAlign: "center", margin: "30px 0" }}>
+                  <div
+                    style={{
+                      fontSize: "30px",
+                      fontWeight: "bold",
+                      color: "#0f172a",
+                      marginBottom: "20px",
+                    }}
+                  >
+                    ¿Qué fracción representa esta figura?
+                  </div>
 
-              <div
-                style={{
-                  display: "flex",
-                  gap: "12px",
-                  justifyContent: "center",
-                  alignItems: "center",
-                  flexWrap: "wrap",
-                }}
-              >
-                <input
-                  type="number"
-                  value={userAnswer}
-                  onChange={(e) => setUserAnswer(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") submitAnswer();
-                  }}
-                  style={{
-                    padding: "16px",
-                    fontSize: "28px",
-                    borderRadius: "18px",
-                    border: "2px solid #cbd5e1",
-                    width: "220px",
-                    textAlign: "center",
-                    outline: "none",
-                  }}
-                  placeholder="?"
-                />
+                  <FractionVisual
+                    numerator={question.numerator}
+                    denominator={question.denominator}
+                    visualKind={question.visualKind}
+                  />
 
-                <button onClick={submitAnswer} style={primaryButton}>
-                  Responder
-                </button>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "12px",
+                      justifyContent: "center",
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                      marginTop: "28px",
+                    }}
+                  >
+                    {question.options.map((option) => (
+                      <button
+                        key={option}
+                        onClick={() => handleAnswer(option)}
+                        style={answerOptionStyle(lastResult !== "")}
+                        disabled={lastResult !== ""}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
 
-                <button onClick={() => setScreen("map")} style={grayButton}>
-                  Salir
-                </button>
-              </div>
+                  <div
+                    style={{
+                      minHeight: "90px",
+                      marginTop: "26px",
+                      textAlign: "center",
+                      fontSize: "22px",
+                      fontWeight: "bold",
+                      color:
+                        lastResult === "correct"
+                          ? "#15803d"
+                          : lastResult === "wrong"
+                          ? "#dc2626"
+                          : "#334155",
+                      whiteSpace: "pre-line",
+                    }}
+                  >
+                    {feedback}
+                  </div>
+                </div>
+              ) : question.type === "fraction_compare" ? (
+                <div style={{ textAlign: "center", margin: "30px 0" }}>
+                  <div
+                    style={{
+                      fontSize: "30px",
+                      fontWeight: "bold",
+                      color: "#0f172a",
+                      marginBottom: "20px",
+                    }}
+                  >
+                    ¿Cuál fracción es mayor?
+                  </div>
 
-              <div
-                style={{
-                  minHeight: "60px",
-                  marginTop: "26px",
-                  textAlign: "center",
-                  fontSize: "22px",
-                  fontWeight: "bold",
-                  color:
-                    lastResult === "correct"
-                      ? "#15803d"
-                      : lastResult === "wrong"
-                      ? "#dc2626"
-                      : "#334155",
-                }}
-              >
-                {feedback}
-              </div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                      gap: "20px",
+                      alignItems: "start",
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: "bold", fontSize: "28px", marginBottom: "8px" }}>
+                        A
+                      </div>
+                      <FractionVisual
+                        numerator={question.leftNumerator}
+                        denominator={question.leftDenominator}
+                        visualKind={question.leftVisualKind}
+                      />
+                    </div>
+
+                    <div>
+                      <div style={{ fontWeight: "bold", fontSize: "28px", marginBottom: "8px" }}>
+                        B
+                      </div>
+                      <FractionVisual
+                        numerator={question.rightNumerator}
+                        denominator={question.rightDenominator}
+                        visualKind={question.rightVisualKind}
+                      />
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "12px",
+                      justifyContent: "center",
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                      marginTop: "28px",
+                    }}
+                  >
+                    <button
+                      onClick={() => handleAnswer("left")}
+                      style={answerOptionStyle(lastResult !== "")}
+                      disabled={lastResult !== ""}
+                    >
+                      A
+                    </button>
+                    <button
+                      onClick={() => handleAnswer("right")}
+                      style={answerOptionStyle(lastResult !== "")}
+                      disabled={lastResult !== ""}
+                    >
+                      B
+                    </button>
+                  </div>
+
+                  <div
+                    style={{
+                      minHeight: "90px",
+                      marginTop: "26px",
+                      textAlign: "center",
+                      fontSize: "22px",
+                      fontWeight: "bold",
+                      color:
+                        lastResult === "correct"
+                          ? "#15803d"
+                          : lastResult === "wrong"
+                          ? "#dc2626"
+                          : "#334155",
+                      whiteSpace: "pre-line",
+                    }}
+                  >
+                    {feedback}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div
+                    style={{
+                      textAlign: "center",
+                      fontSize: "72px",
+                      fontWeight: "bold",
+                      color: "#0f172a",
+                      margin: "40px 0 30px",
+                    }}
+                  >
+                    {mode === "multiplication"
+                      ? `${question.promptA} × ${question.promptB}`
+                      : `${question.promptA} ÷ ${question.promptB}`}
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "12px",
+                      justifyContent: "center",
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <input
+                      type="number"
+                      value={userAnswer}
+                      onChange={(e) => setUserAnswer(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") submitAnswer();
+                      }}
+                      style={{
+                        padding: "16px",
+                        fontSize: "28px",
+                        borderRadius: "18px",
+                        border: "2px solid #cbd5e1",
+                        width: "220px",
+                        textAlign: "center",
+                        outline: "none",
+                      }}
+                      placeholder="?"
+                    />
+
+                    <button onClick={submitAnswer} style={primaryButton}>
+                      Responder
+                    </button>
+
+                    <button onClick={() => setScreen("map")} style={grayButton}>
+                      Salir
+                    </button>
+                  </div>
+
+                  <div
+                    style={{
+                      minHeight: "90px",
+                      marginTop: "26px",
+                      textAlign: "center",
+                      fontSize: "22px",
+                      fontWeight: "bold",
+                      color:
+                        lastResult === "correct"
+                          ? "#15803d"
+                          : lastResult === "wrong"
+                          ? "#dc2626"
+                          : "#334155",
+                      whiteSpace: "pre-line",
+                    }}
+                  >
+                    {feedback}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -914,7 +1628,7 @@ export default function App() {
               </h2>
 
               <p style={{ fontSize: "22px", color: "#334155" }}>
-                Puntaje final: <strong>{score}/{QUESTIONS_PER_LEVEL}</strong>
+                Puntaje final: <strong>{score}/{totalQuestions}</strong>
               </p>
 
               <p
@@ -948,7 +1662,9 @@ export default function App() {
                   }}
                 >
                   <div style={{ color: "#64748b", marginBottom: "8px" }}>Resultado</div>
-                  <div style={{ fontSize: "36px", fontWeight: "bold" }}>{score}/10</div>
+                  <div style={{ fontSize: "36px", fontWeight: "bold" }}>
+                    {score}/{totalQuestions}
+                  </div>
                 </div>
 
                 <div
