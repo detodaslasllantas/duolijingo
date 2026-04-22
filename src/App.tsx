@@ -170,7 +170,7 @@ function getQuestionsPerLevel(mode: Mode, levelId: number) {
   return 8;
 }
 
-function getPassScore(mode: Mode, levelId: number, totalQuestions: number) {
+function getPassScore(mode: Mode, levelId: number) {
   if (mode !== "fractions") return 8;
   if (levelId === 1) return 3;
   if (levelId === 2) return 3;
@@ -671,7 +671,7 @@ export default function App() {
   );
 
   const totalQuestions = getQuestionsPerLevel(mode, currentLevel);
-  const passScore = getPassScore(mode, currentLevel, totalQuestions);
+  const passScore = getPassScore(mode, currentLevel);
 
   const [question, setQuestion] = useState<Question>(
     generateQuestionForMode(mode, levels[0].values, [], 1)
@@ -1093,7 +1093,7 @@ export default function App() {
                 const locked = level.id > unlockedLevel;
                 const completed = level.id < unlockedLevel;
                 const levelQuestions = getQuestionsPerLevel(mode, level.id);
-                const levelPass = getPassScore(mode, level.id, levelQuestions);
+                const levelPass = getPassScore(mode, level.id);
 
                 return (
                   <button
